@@ -1,0 +1,326 @@
+---
+title: "PDL"
+author: 
+- "Chantres Arrieta Nikole"
+- "Corona López José Luis"
+- "Popoca Rivas Brayan Nain"
+date: "2025-02-13"
+output: pdf_document
+header-includes:
+  - \renewcommand{\and}{\\}
+---
+
+Librerías a utilizar
+
+```{r, message=FALSE}
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+```
+
+# Estimación Bayesiana
+
+$$
+P(A|B) =  \dfrac{P(B|A)P(A)}{P(B)}
+$$
+
+$A$ representa el conjunto de obligadores por grado
+
+$B$ representa el conjunto de incumplimientos
+
+$P(A|B)$ = Probabilidad de que un grado específico tenga un incumplimiento.
+
+$P(B|A)$ = Tasa de incumplimiento para cada grado, o sea,  $\dfrac{Número\ de\ incumplimientos\ de\ un\ grado}{Número\ de\ obligadores\ de\ grado}$
+
+$P(A)$ = Proporción de obligadores en esa categoría respecto al total, $\dfrac{Número\ de\ obligadores\ de\ un\ grado}{Número\ total\ de\ obligadores}$
+
+$P(B)$ = Probabilidad de incumplimiento, $\dfrac{Número\ total\ de\ incumplimientos}{Número\ total\ de\ obligadores}\\$
+
+
+```{r}
+Cla <- c("AAA", "AA", "A", "BBB", "BB", "B", "CCC", "CC", "C")
+Obligadores <- c(34, 56, 119, 257, 191, 102, 50, 34, 12)
+Incumplimientos <- c(1, 1, 3, 2, 2, 6, 3, 1, 2)
+
+# dataframe
+df1 <- data.frame(Obligadores, Incumplimientos, row.names = Cla)
+
+# Tasa de incumplimiento para cada clasificación 
+PrBA <- df1$Incumplimientos/df1$Obligadores
+
+# Proporción de obligadores de cada categoría respecto al total
+PrA <- df1$Obligadores/sum(df1$Obligadores)
+
+# Probabilidad de incumplimiento
+PrB <- sum(df1$Incumplimientos)/sum(df1$Obligadores)
+
+# Probabilidad de A dado B
+PrAB <- PrBA*PrA/PrB
+
+Est_Bay <- round(cbind(df1, PrBA, PrA, PrAB), 7)
+
+Est_Bay
+
+# Gráfico de Estimación Bayesiana
+
+barplot(Est_Bay$PrAB, names.arg = rownames(Est_Bay),
+  main = "Estimaciones Bayesianas", xlab = "Grados",
+  ylab = "Pr(A|B)", col = "skyblue")
+
+```
+
+# Distribución Binomial
+
+```{r}
+dist_bin <- data.frame(matrix(nrow = 22, ncol = 9))
+
+for (i in 1:9) {
+  dist_bin[,i]  <- round(dbinom(0:21, sum(Incumplimientos), Est_Bay[i,5]), 8)
+  colnames(dist_bin)[i] <- Cla[i]
+  row.names(dist_bin) <- c(0:21)
+}
+
+dist_bin
+
+for (i in 1:ncol(dist_bin)) {
+  barplot(dist_bin[,i], names.arg = 0:21,
+          main = paste("Distribución Binomial del grado", Cla[i]),
+          ylab = "Probabildad")
+}
+```
+
+# Distribución Poisson
+
+```{r}
+dist_poi <- data.frame(matrix(nrow = 22, ncol = 9))
+
+for (i in 1:9) {
+  dist_poi[,i]  <- round(dpois(0:21, Est_Bay[i,3]), 8)
+  colnames(dist_poi)[i] <- Cla[i]
+  row.names(dist_poi) <- c(0:21)
+}
+
+dist_poi
+
+for (i in 1:ncol(dist_poi)) {
+  barplot(dist_poi[,i], names.arg = 0:21,
+          main = paste("Distribución Poisson del grado", Cla[i]),
+          ylab = "Probabildad")
+}
+```
+
+## Gráficos de la binomial y Poisson
+
+```{r}
+df_bin_long <- dist_bin %>%
+  pivot_longer(cols = everything(),
+               names_to = "Categoria",
+               values_to = "Probabilidad") %>%
+  mutate(Num_Incumplimientos = rep(0:21, length(Cla)))
+
+df_poi_long <- dist_poi %>%
+  pivot_longer(cols = everything(),
+               names_to = "Categoria",
+               values_to = "Probabilidad") %>%
+  mutate(Num_Incumplimientos = rep(0:21, length(Cla)))
+
+# Gráfico combinado para dist_bin
+ggplot(df_bin_long, aes(x = Num_Incumplimientos, y = Probabilidad, fill = Categoria)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Distribución Binomial por Categoría",
+       x = "Número de Incumplimientos",
+       y = "Probabilidad") +
+  theme_minimal()
+
+# Gráfico combinado para dist_poi
+ggplot(df_poi_long, aes(x = Num_Incumplimientos, y = Probabilidad, fill = Categoria)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Distribución de Poisson por Categoría",
+       x = "Número de Incumplimientos",
+       y = "Probabilidad") +
+  theme_minimal()
+```
+
+\newpage
+
+# Convolución
+
+$$
+P(Z=z) = \sum_{x} P(X=x) \cdot P(Y=z-x)
+$$
+
+Ejemplo:
+
+|  Soporte  |      X    |      Y    |
+|-----------|-----------|-----------|
+|     0     |     .2    |     .7    |
+|     1     |     .3    |     .2    |
+|     2     |     .5    |     .1    |
+
+
+
+$$
+\begin{aligned}
+P(Z=0) &= \left[ P(X=0) \cdot P(Y=0-0) \right] + \left[ P(X=1) \cdot P(Y=0-1) \right] \\
+&= \left[ P(X=0) \cdot P(Y=0) \right] + \left[ P(X=1) \cdot P(Y=-1) \right] \\
+&= P(X=0) \cdot P(Y=0)
+\end{aligned}
+$$
+
+$$
+\begin{aligned}
+P(Z=1) &= \left[ P(X=0) \cdot P(Y=1-0) \right] + \left[ P(X=1) \cdot P(Y=1-1) \right] + \left[ P(X=2) \cdot P(Y=1-2) \right] \\
+&= \left[ P(X=0) \cdot P(Y=1) \right] + \left[ P(X=1) \cdot P(Y=0) \right] + \left[ P(X=2) \cdot P(Y=-1) \right] \\
+&= P(X=0) \cdot P(Y=1) + P(X=1) \cdot P(Y=0)
+\end{aligned}
+$$
+
+$$
+\begin{aligned}
+P(Z=2) &= \left[ P(X=0) \cdot P(Y=2-0) \right] + \left[ P(X=1) \cdot P(Y=2-1) \right] + \left[ P(X=2) \cdot P(Y=2-2) \right] + \left[ P(X=3) \cdot P(Y=2-3) \right] \\
+&= \left[ P(X=0) \cdot P(Y=2) \right] + \left[ P(X=1) \cdot P(Y=1) \right] + \left[ P(X=2) \cdot P(Y=0) \right] + \left[ P(X=3) \cdot P(Y=-1) \right]\\
+&= P(X=0) \cdot P(Y=2) + P(X=1) \cdot P(Y=1) \ + P(X=2) \cdot P(Y=0)
+\end{aligned}
+$$
+
+$$
+P(Z=3) = [P(X=0) \cdot P(Y=3)] + [P(X=1) \cdot P(Y=2)] \ + [P(X=2) \cdot P(Y=1)]
+$$
+$$
++ [P(X=3) \cdot P(Y=0)]
+$$
+
+
+|  Soporte  |      X    |      Y    |    Z     |
+|-----------|-----------|-----------|----------|
+|     0     |     .2    |     .7    |    .14   |
+|     1     |     .3    |     .2    |    .25   |
+|     2     |     .5    |     .1    |    .43   |
+|     3     |      0    |      0    |    .13   |
+|     4     |      0    |      0    |    .05   |
+
+```{r, message=FALSE}
+
+# Primera Convolución: Binomial y Poisson
+
+Convolucion1 <- data.frame(matrix(nrow = 43, ncol = 9))
+
+for (i in 1:9) {
+  Convolucion1[,i] <- round(convolve(dist_bin[,i], rev(dist_poi[,i]), type = "open"), 8)
+  colnames(Convolucion1)[i] <- Cla[i]
+  row.names(Convolucion1) <- c(0:42)
+}
+
+
+# Segunda Convolución: Primera convolución con binomial
+
+Convolucion2 <- data.frame(matrix(nrow = 64, ncol = 9))
+
+for (i in 1:9) {
+  Convolucion2[,i] <- round(convolve(Convolucion1[,i], rev(dist_bin[,i]), type = "open"), 8)
+  colnames(Convolucion2)[i] <- Cla[i]
+  row.names(Convolucion2) <- c(0:63)
+}
+
+# Tercera Convolución: Segunda convolución con binomial
+
+Convolucion3 <- data.frame(matrix(nrow = 85, ncol = 9))
+
+for (i in 1:9) {
+  Convolucion3[,i] <- round(convolve(Convolucion2[,i], rev(dist_bin[,i]), type = "open"), 8)
+  colnames(Convolucion3)[i] <- Cla[i]
+  row.names(Convolucion3) <- c(0:84)
+}
+
+# Cuarta Convolución: Tercera convolución con binomial
+
+Convolucion4 <- data.frame(matrix(nrow = 106, ncol = 9))
+
+for (i in 1:9) {
+  Convolucion4[,i] <- round(convolve(Convolucion3[,i], rev(dist_bin[,i]), type = "open"), 8)
+  colnames(Convolucion4)[i] <- Cla[i]
+  row.names(Convolucion4) <- c(0:105)
+}
+
+# Quinta Convolución: Cuarta convolución con binomial
+
+Convolucion5 <- data.frame(matrix(nrow = 127, ncol = 9))
+
+for (i in 1:9) {
+  Convolucion5[,i] <- round(convolve(Convolucion4[,i], rev(dist_bin[,i]), type = "open"), 8)
+  colnames(Convolucion5)[i] <- Cla[i]
+  row.names(Convolucion5) <- c(0:126)
+}
+
+# Sexta Convolución: Quinta convolución con binomial
+
+Convolucion6 <- data.frame(matrix(nrow = 148, ncol = 9))
+
+for (i in 1:9) {
+  Convolucion6[,i] <- round(convolve(Convolucion5[,i], rev(dist_bin[,i]), type = "open"), 8)
+  colnames(Convolucion6)[i] <- Cla[i]
+  row.names(Convolucion6) <- c(0:147)
+}
+
+# Graficar la Sexta Convolución
+
+for (i in 1:ncol(Convolucion6)) {
+  barplot(Convolucion6[c(1:66),i], names.arg = 0:65,
+          main = paste("Distribución de la 6ta Convolución del grado", Cla[i]),
+          ylab = "Probabildad")
+}
+
+Convolucion6
+
+# Tratar de encontrar un k
+
+for (i in 1:15) {
+  z <- c(t(Convolucion6[i,]))
+  plot(z, type = "o", main = paste("Ajuste para el k = ", i),
+       xlab = "Grados", ylab = "Probabilidad")
+  
+  modelo_lm <- lm(z ~ seq_along(z))
+  abline(modelo_lm, col = "red", lwd = 2)
+  
+  modelo_nl <- nls(z ~ a * exp(b * seq_along(z)), start = list(a = 1, b = 0.01))
+  lines(seq_along(z), predict(modelo_nl), col = "green", lwd = 2)
+}
+
+# Definimos nuestras probabilidades de incumplimiento implicitas
+
+AAA <- Convolucion6[2,1]
+AA <- Convolucion6[2,2]
+A <- Convolucion3[4,3]
+BBB <- Convolucion3[3,4]
+BB <- Convolucion3[3,5]
+B <- Convolucion2[7,6]
+CCC <- Convolucion2[4,7]
+CC <- Convolucion4[2,8]
+C <- Convolucion2[3,9]
+  
+PD <- c(AAA, AA, A, BBB, BB, B, CCC, CC, C)
+PD
+
+
+# Graficamos las PD
+
+plot(PD, type = "o", main = "Ajuste", xlab = "Índice", ylab = "Probabilidad")
+
+modelo_nl <- nls(PD ~ a * exp(b * seq_along(PD)), start = list(a = min(PD), b = 0.1))
+
+prediccion_exponencial <- predict(modelo_nl)
+
+lines(seq_along(PD), prediccion_exponencial, col = "green", lwd = 2)
+
+modelo_lm <- lm(PD ~ seq_along(PD))  
+abline(modelo_lm, col = "red", lwd = 2) 
+
+
+``` 
+
+
+
+
+
+
+
