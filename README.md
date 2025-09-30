@@ -1,4 +1,4 @@
-# R-PD-Model-Bayesian-Convolution
+# R-Credit-Risk-Model-Bayesian-Convolution
 
 ## Descripción
 
